@@ -1,0 +1,1150 @@
+{
+  "name": "Spotify Manager",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        2016,
+        -1232
+      ],
+      "id": "f4371473-52f5-4ddb-a6bc-306c7320c359",
+      "name": "Start"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://accounts.spotify.com/api/token",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "refresh_token"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{$env.SPOTIFY_CLIENT_SECRET}}"
+            },
+            {
+              "name": "client_id",
+              "value": "={{$env.SPOTIFY_CLIENT_ID}}"
+            },
+            {
+              "name": "refresh_token",
+              "value": "={{$env.SPOTIFY_REFRESH_TOKEN}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2256,
+        -400
+      ],
+      "id": "39ab44cf-a2ac-4df4-9c07-3d0b5d15fb37",
+      "name": "Get Fresh Token"
+    },
+    {
+      "parameters": {
+        "url": "https://api.spotify.com/v1/me/playlists",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "50"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2480,
+        -400
+      ],
+      "id": "9d1843ce-34e5-4631-952c-575ed8138440",
+      "name": "Get My Playlists"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.spotify.com/v1/playlists/{{ $json.playlist_id }}/tracks",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "spotifyOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"uris\": {{ JSON.stringify($json.uris) }}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        5168,
+        -1008
+      ],
+      "id": "b5420052-577a-47bf-a005-66375e3aed00",
+      "name": "HTTP Request2",
+      "credentials": {
+        "spotifyOAuth2Api": {
+          "id": "$SPOTIFY_ID",
+          "name": "Spotify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Grab the Playlist ID (since all 100 items in this batch share the same one)\nconst playlistId = $input.first().json.id;\n\n// 2. Loop through the 100 items and format them into an array of strict Spotify URIs\nconst trackUris = $input.all().map(item => `spotify:track:${item.json.spotify_id}`);\n\n// 3. Return exactly ONE item containing the payload for the HTTP Request\nreturn {\n  json: {\n    playlist_id: playlistId,\n    uris: trackUris\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4848,
+        -1200
+      ],
+      "id": "b057efe1-3537-40ae-b036-e133b93c6460",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        4624,
+        -1200
+      ],
+      "id": "0346020c-00e4-4ae6-bd79-d93eb02d65bc",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "batchSize": 100,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        4096,
+        -1232
+      ],
+      "id": "22df4f62-3e6e-42d3-8b6f-cfb08cd323f2",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "resource": "playlist",
+        "operation": "create",
+        "name": "={{ $('Playlists informations1').item.json.playlist_name }} - Part {{ $runIndex + 1 }}",
+        "additionalFields": {
+          "public": true
+        }
+      },
+      "type": "n8n-nodes-base.spotify",
+      "typeVersion": 1,
+      "position": [
+        5120,
+        -1504
+      ],
+      "id": "896f714f-32e4-4d8e-9599-dc3a9999b276",
+      "name": "Create a playlist",
+      "executeOnce": true,
+      "credentials": {
+        "spotifyOAuth2Api": {
+          "id": "$SPOTIFY_ID",
+          "name": "Spotify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "bad771d7-2f4c-43bb-996a-0e46bbf85231",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $json.owner.display_name }}",
+              "rightValue": "$MY_USER"
+            },
+            {
+              "id": "b24390ad-8a57-4cf2-ac87-5257481e9b35",
+              "leftValue": "={{ $json.public }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "e8817b48-14d7-4571-abc8-b356ae2ad7cb",
+              "leftValue": "={{ $json.name }}",
+              "rightValue": "Redacted",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e04e8dca-faad-4c3c-9c40-33aefe080643",
+      "name": "Filter Small Playlist1",
+      "type": "n8n-nodes-base.filter",
+      "position": [
+        2880,
+        -1232
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "include": "selectedOtherFields",
+        "fieldsToInclude": "href",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        3456,
+        -1232
+      ],
+      "id": "bf64c2ef-046f-4e4b-9728-a31f219c2af7",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "content": "Redacted Manager\n",
+        "width": 368
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2240,
+        -1296
+      ],
+      "id": "107ed4a0-9acb-4892-b2ee-621c88db7d07",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"playlist_name\": \"{{ $json.name }}\",\n  \"playlist_description\": \"{{ $json.description }}\",\n  \"playlist_spotify_uri\": \"{{ $json.uri.split(\":\").pop() }}\"\n}",
+        "options": {}
+      },
+      "id": "86246d97-edc3-4d28-b1fe-0f32c82739bd",
+      "name": "Playlists informations1",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        3088,
+        -1232
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((row) => {\n  const playlist_data = row.json;\n  const track = playlist_data.item\n\n  return {\n    json: {\n      // -- For the playlist_tracks table --\n      playlist_id:  playlist_data.playlist_id,\n      local_position: playlist_data.local_position,\n      added_at: playlist_data.added_at,\n      \n      // -- For the tracks table --\n      spotify_id:  track.id|| track.uri || 'local_file_' + playlist_data.local_position,\n      track_name: track.name || 'Unknown Track',\n      artists: track.artists ? track.artists.map(a => a.name).join(', ') : 'Unknown Artist',\n      album_name: track.album ? track.album.name : 'Unknown Album',\n      album_release_date: track.album ? track.album.release_date : null,\n      album_track_number: track.track_number || 1\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3856,
+        -1232
+      ],
+      "id": "410c6787-7614-4955-ae79-8e249b5d6bd1",
+      "name": "Code in JavaScript7"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((row, index) => {\n  // 1. Isolate the 'items' object (this leaves behind the parent wrapper)\n  const items = row.json.items;\n\n  // 2. Inject the new data directly into the isolated object\n  items.playlist_id = row.json.href.split('/')[5];\n  items.local_position = index + 1;\n\n  // 3. Return ONLY the enriched items object, perfectly wrapped for n8n\n  return { \n    json: items \n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3680,
+        -1232
+      ],
+      "id": "8a7749e1-6b28-43fa-a65b-3bd9fb3a9c66",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "playlist_tracks",
+          "mode": "list",
+          "cachedResultName": "playlist_tracks"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "local_position": "={{ $json.local_position }}",
+            "playlist_id": "={{ $json.playlist_id }}",
+            "spotify_id": "={{ $json.spotify_id }}",
+            "added_at": "={{ $json.added_at }}"
+          },
+          "matchingColumns": [
+            "playlist_id",
+            "spotify_id"
+          ],
+          "schema": [
+            {
+              "id": "playlist_id",
+              "displayName": "playlist_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "spotify_id",
+              "displayName": "spotify_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "local_position",
+              "displayName": "local_position",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "added_at",
+              "displayName": "added_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        4160,
+        -320
+      ],
+      "id": "7fd7388e-1023-4f1b-a8ad-e67623784a57",
+      "name": "Update Relation Table",
+      "credentials": {
+        "postgres": {
+          "id": "$POSTGRES_ID",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tracks",
+          "mode": "list",
+          "cachedResultName": "tracks"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "spotify_id": "={{ $json.spotify_id }}",
+            "track_name": "={{ $json.track_name }}",
+            "artist_name": "={{ $json.artists }}",
+            "album_name": "={{ $json.album_name }}"
+          },
+          "matchingColumns": [
+            "spotify_id"
+          ],
+          "schema": [
+            {
+              "id": "spotify_id",
+              "displayName": "spotify_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "track_name",
+              "displayName": "track_name",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "artist_name",
+              "displayName": "artist_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "album_name",
+              "displayName": "album_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        4160,
+        -512
+      ],
+      "id": "ccd2ceb1-18a7-4bbb-bf45-aefe86c67638",
+      "name": "Update Track Library",
+      "credentials": {
+        "postgres": {
+          "id": "$POSTGRES_ID",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((row) => {\n  const playlist_data = row.json;\n  const track = playlist_data.item\n\n  return {\n    json: {\n      // -- For the playlist_tracks table --\n      playlist_id:  playlist_data.playlist_id,\n      local_position: playlist_data.local_position,\n      added_at: playlist_data.added_at,\n      \n      // -- For the tracks table --\n      spotify_id:  track.id|| track.uri || 'local_file_' + playlist_data.local_position,\n      track_name: track.name || 'Unknown Track',\n      artists: track.artists ? track.artists.map(a => a.name).join(', ') : 'Unknown Artist',\n      album_name: track.album ? track.album.name : 'Unknown Album',\n      album_release_date: track.album ? track.album.release_date : null,\n      album_track_number: track.track_number || 1\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3888,
+        -400
+      ],
+      "id": "4f88c115-e1c2-454f-8b8e-379966006d95",
+      "name": "Map Database"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((row, index) => {\n  const items = row.json.items;\n\n  //Agrego nuevos atributos\n  \n  items['playlist_id'] = row.json.href.split('/')[5];\n  \n  items['local_position'] = index+1;\n\n  return { json: items }; //La envoltura del objeto\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3696,
+        -400
+      ],
+      "id": "6b91d961-59c3-46de-8670-f02aa4147afd",
+      "name": "Clean JSON"
+    },
+    {
+      "parameters": {
+        "content": "EXTRACT-TRANSFORM-LOAD",
+        "width": 368
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2256,
+        -512
+      ],
+      "id": "b99d0c95-80c1-4b0d-82de-e3ca1474574c",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "bad771d7-2f4c-43bb-996a-0e46bbf85231",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $json.owner.display_name }}",
+              "rightValue": "$MY_USER"
+            },
+            {
+              "id": "b24390ad-8a57-4cf2-ac87-5257481e9b35",
+              "leftValue": "={{ $json.public }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8ba2adbb-9e31-4ad6-ad00-94cc06c928c4",
+      "name": "Filter My Public Playlists",
+      "type": "n8n-nodes-base.filter",
+      "position": [
+        2896,
+        -400
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "playlists",
+          "mode": "list",
+          "cachedResultName": "playlists"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "playlist_id": "={{ $json.uri.split(':').pop()}}",
+            "name": "={{ $json.name }}",
+            "merge_order": 0
+          },
+          "matchingColumns": [
+            "playlist_id"
+          ],
+          "schema": [
+            {
+              "id": "playlist_id",
+              "displayName": "playlist_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "merge_order",
+              "displayName": "merge_order",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3088,
+        -400
+      ],
+      "id": "81af0c79-72d6-496d-8531-ddfeac0555ab",
+      "name": "Update Playlist Table",
+      "credentials": {
+        "postgres": {
+          "id": "$POSTGRES_ID",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "include": "selectedOtherFields",
+        "fieldsToInclude": "href",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        3504,
+        -400
+      ],
+      "id": "a65d3460-2cde-4b3e-b1aa-e72c6ddb9690",
+      "name": "Split2"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.spotify.com/v1/playlists/{{ $json.playlist_id }}/items",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "market",
+              "value": "AR"
+            },
+            {
+              "name": "limit",
+              "value": "100"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Fresh Token').first().json.access_token }}"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ $response.body.next }}",
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ $response.body.next == null }}"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3296,
+        -400
+      ],
+      "id": "8f592cf4-605f-442b-a34a-8b2c96374ea3",
+      "name": "Get Tracks & Playlist Info"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().flatMap((row) => {\n  const playlists = row.json.items; \n  if (!playlists || !Array.isArray(playlists)) {\n      return []; \n  }\n  return playlists.map((playlist_obj) => {\n    return {json: playlist_obj};\n  });  \n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2688,
+        -400
+      ],
+      "id": "b9457ee7-3e16-42d1-8a71-f87242c12ab9",
+      "name": "Clean Playlists Request"
+    },
+    {
+      "parameters": {
+        "url": "https://api.spotify.com/v1/me/playlists",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "50"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2464,
+        -1232
+      ],
+      "id": "21fbee15-abac-47af-a3f6-0e49ff74a238",
+      "name": "Get My Playlists1"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().flatMap((row) => {\n  const playlists = row.json.items; \n  if (!playlists || !Array.isArray(playlists)) {\n      return []; \n  }\n  return playlists.map((playlist_obj) => {\n    return {json: playlist_obj};\n  });  \n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2672,
+        -1232
+      ],
+      "id": "84568e3b-9ed2-4232-9aa7-3f9d47d2f97a",
+      "name": "Clean Playlists Request1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://accounts.spotify.com/api/token",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "refresh_token"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{$env.SPOTIFY_CLIENT_SECRET}}"
+            },
+            {
+              "name": "client_id",
+              "value": "={{$env.SPOTIFY_CLIENT_ID}}"
+            },
+            {
+              "name": "refresh_token",
+              "value": "={{$env.SPOTIFY_REFRESH_TOKEN}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2240,
+        -1232
+      ],
+      "id": "38d64702-6b28-41c1-8d8c-cbd819f30635",
+      "name": "Get Fresh Token1"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.spotify.com/v1/playlists/{{ $json.playlist_spotify_uri }}/items\n",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "market",
+              "value": "AR"
+            },
+            {
+              "name": "limit",
+              "value": "100"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Fresh Token1').first().json.access_token }}"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ $response.body.next }}",
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ $response.body.next == null }}"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3280,
+        -1232
+      ],
+      "id": "6c3c18f8-ca4a-498b-9238-e1009136a444",
+      "name": "Get Tracks & Playlist Info1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.spotify.com/v1/me/playlists",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Fresh Token1').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n\"name\": \"New Sync Playlist\",\n\"description\": \"Automated sync from n8n\",\n\"public\": false\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4368,
+        -1088
+      ],
+      "id": "d5ee8e9f-c713-4239-8556-fd83d3ebb494",
+      "name": "HTTP Request"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Get Fresh Token1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Fresh Token": {
+      "main": [
+        [
+          {
+            "node": "Get My Playlists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get My Playlists": {
+      "main": [
+        [
+          {
+            "node": "Clean Playlists Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a playlist": {
+      "main": [
+        []
+      ]
+    },
+    "Filter Small Playlist1": {
+      "main": [
+        [
+          {
+            "node": "Playlists informations1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Playlists informations1": {
+      "main": [
+        [
+          {
+            "node": "Get Tracks & Playlist Info1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript7": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Database": {
+      "main": [
+        [
+          {
+            "node": "Update Track Library",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Relation Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean JSON": {
+      "main": [
+        [
+          {
+            "node": "Map Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter My Public Playlists": {
+      "main": [
+        [
+          {
+            "node": "Update Playlist Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Playlist Table": {
+      "main": [
+        [
+          {
+            "node": "Get Tracks & Playlist Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split2": {
+      "main": [
+        [
+          {
+            "node": "Clean JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Tracks & Playlist Info": {
+      "main": [
+        [
+          {
+            "node": "Split2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Playlists Request": {
+      "main": [
+        [
+          {
+            "node": "Filter My Public Playlists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get My Playlists1": {
+      "main": [
+        [
+          {
+            "node": "Clean Playlists Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Playlists Request1": {
+      "main": [
+        [
+          {
+            "node": "Filter Small Playlist1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Fresh Token1": {
+      "main": [
+        [
+          {
+            "node": "Get My Playlists1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Tracks & Playlist Info1": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "f573946a-ab63-453e-a3ec-057c26ab0906",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "$N8N_INSTANCE"
+  },
+  "id": "s91CLCXe6YqzrEdL",
+  "tags": []
+}
